@@ -1,0 +1,101 @@
+#include <Adafruit_ADS1X15.h>
+#define power_pin 5
+#define channelvalue 0
+
+Adafruit_ADS1X15 ads1115; 
+
+// Montaje: Sal(A0), Humedad(A1), Temp(A2)
+
+/////////////////////////////////////////
+//  Void setup()  ///////////////////////
+/////////////////////////////////////////
+
+void setup() {
+  Serial.begin(9600);
+  Serial.println("Inicializamos la sonda");
+  
+
+  ads1115.begin(0x48);
+  ads1115.setGain(GAIN_ONE);
+}
+
+/////////////////////////////////////////
+//  sensHum()  //////////////////////////
+/////////////////////////////////////////
+
+int sensHum(){
+  int channelValue = 0;
+  int sensorValue = 0;
+  int humidityValue = 0;
+
+  sensorValue = ads1115.readADC_SingleEnded(1);
+  //10850 mojado
+  //20640 seco
+
+  humidityValue = map(sensorValue, 20640, 10850, 0, 100);
+
+  return humidityValue;
+}
+
+/////////////////////////////////////////
+//  sensSal()  //////////////////////////
+/////////////////////////////////////////
+
+int sensSal(){
+  
+  int16_t adc1;
+
+  digitalWrite(power_pin, HIGH);  
+  delay(100);
+
+  int adc0 = analogRead(A0);
+  digitalWrite(power_pin, LOW);
+  delay(100);
+
+  int salinidad = 100*353 / (353-678) - adc1*100 /(353 - 678);
+
+  return salinidad;
+}
+
+/////////////////////////////////////////
+//  sensTemp()  /////////////////////////
+/////////////////////////////////////////
+
+float sensTemp(){
+  int16_t adc2 = ads1115.readADC_SingleEnded(2);
+
+  float temperatura = ((((adc2*4.096)/32767)-0.75)/0.037)-5;
+
+  return temperatura;
+}
+
+/////////////////////////////////////////
+//  Void loop()  ////////////////////////
+/////////////////////////////////////////
+
+void loop() {
+  
+  //  Llamadas a funciones
+  int hum = sensHum();
+  
+  float sal = sensSal();
+
+  float temp = sensTemp();
+
+
+  //Muestreo de los resultados en pantalla
+  Serial.print("La humedad es del: ");
+  Serial.print(hum);
+  Serial.println("%");
+  
+
+  //Serial.print("La salinidad es de: ");
+  //Serial.print(hum);
+  //Serial.println("%");
+  
+  
+  Serial.print("La temperatura es: ");
+  Serial.print(temp);
+  Serial.println(" ºC");
+  
+}

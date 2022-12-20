@@ -3,10 +3,12 @@
 #define power_pin 5
 #define channelvalue 0
 #define offset 0.00
-#define PRINT_DEBUG_MESSAGES
-#define WiFi_CONNECTION_UPV
-#define REST_SERVER_THINGSPEAK
 
+#define PRINT_DEBUG_MESSAGES
+//#define PRINT_HTTP_RESPONSE
+//#define WiFi_CONNECTION_UPV
+#define REST_SERVER_THINGSPEAK //Selecciona tu canal para ver los datos en la web (https://thingspeak.com/channels/360979)
+//#define REST_SERVER_DWEET //Selecciona tu canal para ver los datos en la web (http://dweet.io/follow/PruebaGTI)
 
 Adafruit_ADS1X15 ads1115; 
 
@@ -19,8 +21,8 @@ Adafruit_ADS1X15 ads1115;
   const char WiFiSSID[] = "GTI1";
   const char WiFiPSK[] = "1PV.arduino.Toledo";
 #else //Conexion fuera de la UPV
-  const char WiFiSSID[] = "MySSID";
-  const char WiFiPSK[] = "MyPassWord";
+  const char WiFiSSID[] = "MOVISTAR_F240";
+  const char WiFiPSK[] = "AoHQMipLCrzwHrRnJr35";
 #endif
 
 
@@ -48,7 +50,7 @@ WiFiClient client;
 
 #ifdef REST_SERVER_THINGSPEAK 
   const char Rest_Host[] = "api.thingspeak.com";
-  String MyWriteAPIKey="W7B3KDSFDZQU21N4"; // Escribe la clave de tu canal ThingSpeak
+  String MyWriteAPIKey="DQ019L70R9XNPY3B"; // Escribe la clave de tu canal ThingSpeak
 #else 
   const char Rest_Host[] = "dweet.io";
   String MyWriteAPIKey="cdiocurso2022g06"; // Escribe la clave de tu canal Dweet
@@ -57,14 +59,14 @@ WiFiClient client;
 #define NUM_FIELDS_TO_SEND 5 //Numero de medidas a enviar al servidor REST (Entre 1 y 8)
 
 /////////////////////////////////////////////////////
-/////////////// Pin Definitions ////////////////
-//////////////////////////////////////////////////////
+/////////////// Pin Definitions /////////////////////
+/////////////////////////////////////////////////////
 
 const int LED_PIN = 5; // Thing's onboard, green LED
 
 /////////////////////////////////////////////////////
-/////////////// WiFi Connection ////////////////
-//////////////////////////////////////////////////////
+/////////////// WiFi Connection /////////////////////
+/////////////////////////////////////////////////////
 
 void connectWiFi()
 {
@@ -95,7 +97,7 @@ void connectWiFi()
 
 /////////////////////////////////////////////////////
 /////////////// HTTP POST  ThingSpeak////////////////
-//////////////////////////////////////////////////////
+/////////////////////////////////////////////////////
 
 void HTTPPost(String fieldData[], int numFields){
 
@@ -139,8 +141,8 @@ void HTTPPost(String fieldData[], int numFields){
 }
 
 ////////////////////////////////////////////////////
-/////////////// HTTP GET  ////////////////
-//////////////////////////////////////////////////////
+/////////////// HTTP GET  //////////////////////////
+////////////////////////////////////////////////////
 
 void HTTPGet(String fieldData[], int numFields){
   
@@ -185,7 +187,6 @@ void HTTPGet(String fieldData[], int numFields){
     }
 }
 
-// Montaje: Sal(A0), Humedad(A1), Temp(A2)
 // Resistencias: Sal(Am,Mor,Marr) Temp(Roj,Roj,Roj)
 
 
@@ -202,8 +203,10 @@ void setup() {
     Serial.begin(9600);
   #endif
   Serial.println("Inicializamos la sonda");
+  pinMode(power_pin, OUTPUT);
 
   connectWiFi();
+  digitalWrite(LED_PIN, HIGH);
   
   ads1115.begin(0x48);
   ads1115.setGain(GAIN_ONE);
@@ -232,10 +235,12 @@ int sensHum(int pin){
   int humidityValue = 0;
 
   sensorValue = ads1115.readADC_SingleEnded(pin);
-  //10850 mojado
-  //20640 seco
+  //9900 mojado
+  //20454 seco
 
-  humidityValue = map(sensorValue, 20640, 10850, 0, 100);
+  //Serial.print("Hum "); Serial.println(sensorValue);
+
+  humidityValue = map(sensorValue, 20373, 9900, 0, 100);
 
   if(humidityValue<0){
     return 0;
@@ -252,19 +257,26 @@ int sensHum(int pin){
 
 int sensSal(){
   
-  int16_t adc;
-  int salinidad = 0;
+  int adc;
+  int salinidad;
   
   digitalWrite(power_pin, HIGH);  
   delay(100);
-
+  
   adc = analogRead(A0);
+  Serial.print("Sal: "); Serial.println(adc);
+  
   digitalWrite(power_pin, LOW);
   delay(100);
 
-  Serial.println(adc, DEC);
-  salinidad = 100*353 / (353-678) - adc*100 /(353 - 678);
+  salinidad = map(adc, 870, 1024 , 0, 100);
 
+  if(salinidad<0){
+    return 0;
+  }
+  if(salinidad>100){
+    return 100;
+  }
   return salinidad;
 }
 
@@ -275,7 +287,8 @@ int sensSal(){
 float sensTemp(int pin){
   int16_t adc = ads1115.readADC_SingleEnded(pin);
 
-  float temperatura = ((((adc*4.096)/32767)-0.75)/0.037)-26;
+  
+  float temperatura = ((((adc*4.096)/32767)-0.75)/0.037)+3;
 
   return temperatura;
 }
@@ -300,11 +313,11 @@ double senspH(int pin){
 /////////////////////////////////////////
 
 int sensLuz(int pin){
-  int adc = ads1115.readADC_SingleEnded(0);
+  int adc = ads1115.readADC_SingleEnded(pin);
 
-  //Serial.println(adc0);
-  int iluminacion = map(adc , -14, 10, 100, 0);
-  Serial.println(iluminacion);
+  //Serial.print("luz "); Serial.println(adc);
+  int iluminacion = map(adc , 29000, 20, 100, 0);
+  //Serial.println(iluminacion);
  
   if(iluminacion<0){
     return 0;
@@ -324,15 +337,15 @@ void subirDatos(int hum, int sal, double temp, double pH, int luz){
   String data[ NUM_FIELDS_TO_SEND + 1];  // Podemos enviar hasta 8 datos
 
     
-    data[ 1 ] = hum;
+    data[ 1 ] = String(hum);
 
-    data[ 2 ] = sal;
+    data[ 2 ] = String(sal);
 
-    data[ 3 ] = temp;
+    data[ 3 ] = String(temp);
 
-    data[ 4 ] = pH;
+    data[ 4 ] = String(pH);
 
-    data[ 5 ] = luz;
+    data[ 5 ] = String(luz);
 
     //Selecciona si quieres enviar con GET(ThingSpeak o Dweet) o con POST(ThingSpeak)
     //HTTPPost( data, NUM_FIELDS_TO_SEND );
@@ -364,70 +377,18 @@ void loop() {
 
   subirDatos(hum, sal, temp, pH, luz);
 
+ 
+  /*
+  Serial.println(hum);
+  Serial.println();
+  Serial.println(sal);
+  Serial.println();
+  Serial.println(temp);
+  Serial.println();
+  Serial.println(pH);
+  Serial.println();
+  Serial.println(luz);
+  Serial.println();
+  */
   delay(4800);
-}
-  return humidityValue;
-}
-
-/////////////////////////////////////////
-//  sensSal()  //////////////////////////
-/////////////////////////////////////////
-
-int sensSal(){
-  
-  int16_t adc1;
-
-  digitalWrite(power_pin, HIGH);  
-  delay(100);
-
-  int adc0 = analogRead(A0);
-  digitalWrite(power_pin, LOW);
-  delay(100);
-
-  int salinidad = 100*353 / (353-678) - adc1*100 /(353 - 678);
-
-  return salinidad;
-}
-
-/////////////////////////////////////////
-//  sensTemp()  /////////////////////////
-/////////////////////////////////////////
-
-float sensTemp(){
-  int16_t adc2 = ads1115.readADC_SingleEnded(2);
-
-  float temperatura = ((((adc2*4.096)/32767)-0.75)/0.037)-5;
-
-  return temperatura;
-}
-
-/////////////////////////////////////////
-//  Void loop()  ////////////////////////
-/////////////////////////////////////////
-
-void loop() {
-  
-  //  Llamadas a funciones
-  int hum = sensHum();
-  
-  float sal = sensSal();
-
-  float temp = sensTemp();
-
-
-  //Muestreo de los resultados en pantalla
-  Serial.print("La humedad es del: ");
-  Serial.print(hum);
-  Serial.println("%");
-  
-
-  //Serial.print("La salinidad es de: ");
-  //Serial.print(hum);
-  //Serial.println("%");
-  
-  
-  Serial.print("La temperatura es: ");
-  Serial.print(temp);
-  Serial.println(" ºC");
-  
 }

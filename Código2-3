@@ -1,394 +1,64 @@
 #include <Adafruit_ADS1X15.h>
-#include <ESP8266WiFi.h>
-#define power_pin 5
-#define channelvalue 0
-#define offset 0.00
 
-#define PRINT_DEBUG_MESSAGES
-//#define PRINT_HTTP_RESPONSE
-//#define WiFi_CONNECTION_UPV
-#define REST_SERVER_THINGSPEAK //Selecciona tu canal para ver los datos en la web (https://thingspeak.com/channels/360979)
-//#define REST_SERVER_DWEET //Selecciona tu canal para ver los datos en la web (http://dweet.io/follow/PruebaGTI)
+#define channelValue 0
+#define offset 1.16
+#define samplingInterval 20
+#define printInterval 800
+#define ArrayLength 40
+int pHArray [ArrayLength];
+int pHArrayIndex = 0;
+
+int resultado = 0;
 
 Adafruit_ADS1X15 ads1115; 
 
 
-///////////////////////////////////////////////////////
-/////////////// WiFi Definitions //////////////////////
-///////////////////////////////////////////////////////
-
-#ifdef WiFi_CONNECTION_UPV //Conexion UPV
-  const char WiFiSSID[] = "GTI1";
-  const char WiFiPSK[] = "1PV.arduino.Toledo";
-#else //Conexion fuera de la UPV
-  const char WiFiSSID[] = "MOVISTAR_F240";
-  const char WiFiPSK[] = "AoHQMipLCrzwHrRnJr35";
-#endif
-
-
-
-////////////////////////////////////////////////////////
-/////////////// SERVER Definitions /////////////////////
-////////////////////////////////////////////////////////
-
-#if defined(WiFi_CONNECTION_UPV) //Conexion UPV
-  const char Server_Host[] = "proxy.upv.es";
-  const int Server_HttpPort = 8080;
-#elif defined(REST_SERVER_THINGSPEAK) //Conexion fuera de la UPV
-  const char Server_Host[] = "api.thingspeak.com";
-  const int Server_HttpPort = 80;
-#else
-  const char Server_Host[] = "dweet.io";
-  const int Server_HttpPort = 80;
-#endif
-
-WiFiClient client;
-
-///////////////////////////////////////////////////////
-/////////////// HTTP REST Connection //////////////////
-///////////////////////////////////////////////////////
-
-#ifdef REST_SERVER_THINGSPEAK 
-  const char Rest_Host[] = "api.thingspeak.com";
-  String MyWriteAPIKey="DQ019L70R9XNPY3B"; // Escribe la clave de tu canal ThingSpeak
-#else 
-  const char Rest_Host[] = "dweet.io";
-  String MyWriteAPIKey="cdiocurso2022g06"; // Escribe la clave de tu canal Dweet
-#endif
-
-#define NUM_FIELDS_TO_SEND 5 //Numero de medidas a enviar al servidor REST (Entre 1 y 8)
-
-/////////////////////////////////////////////////////
-/////////////// Pin Definitions /////////////////////
-/////////////////////////////////////////////////////
-
-const int LED_PIN = 5; // Thing's onboard, green LED
-
-/////////////////////////////////////////////////////
-/////////////// WiFi Connection /////////////////////
-/////////////////////////////////////////////////////
-
-void connectWiFi()
-{
-  byte ledStatus = LOW;
-
-  #ifdef PRINT_DEBUG_MESSAGES
-    Serial.print("MAC: ");
-    Serial.println(WiFi.macAddress());
-  #endif
-  
-  WiFi.begin(WiFiSSID, WiFiPSK);
-
-  while (WiFi.status() != WL_CONNECTED)
-  {
-    // Blink the LED
-    digitalWrite(LED_PIN, ledStatus); // Write LED high/low
-    ledStatus = (ledStatus == HIGH) ? LOW : HIGH;
-    #ifdef PRINT_DEBUG_MESSAGES
-       Serial.println(".");
-    #endif
-    delay(500);
-  }
-  #ifdef PRINT_DEBUG_MESSAGES
-     Serial.println( "WiFi Connected" );
-     Serial.println(WiFi.localIP()); // Print the IP address
-  #endif
-}
-
-/////////////////////////////////////////////////////
-/////////////// HTTP POST  ThingSpeak////////////////
-/////////////////////////////////////////////////////
-
-void HTTPPost(String fieldData[], int numFields){
-
-// Esta funcion construye el string de datos a enviar a ThingSpeak mediante el metodo HTTP POST
-// La funcion envia "numFields" datos, del array fieldData.
-// Asegurate de ajustar numFields al número adecuado de datos que necesitas enviar y activa los campos en tu canal web
-  
-    if (client.connect( Server_Host , Server_HttpPort )){
-       
-        // Construimos el string de datos. Si tienes multiples campos asegurate de no pasarte de 1440 caracteres
-   
-        String PostData= "api_key=" + MyWriteAPIKey ;
-        for ( int field = 1; field < (numFields + 1); field++ ){
-            PostData += "&field" + String( field ) + "=" + fieldData[ field ];
-        }     
-        
-        // POST data via HTTP
-        #ifdef PRINT_DEBUG_MESSAGES
-            Serial.println( "Connecting to ThingSpeak for update..." );
-        #endif
-        client.println( "POST http://" + String(Rest_Host) + "/update HTTP/1.1" );
-        client.println( "Host: " + String(Rest_Host) );
-        client.println( "Connection: close" );
-        client.println( "Content-Type: application/x-www-form-urlencoded" );
-        client.println( "Content-Length: " + String( PostData.length() ) );
-        client.println();
-        client.println( PostData );
-        #ifdef PRINT_DEBUG_MESSAGES
-            Serial.println( PostData );
-            Serial.println();
-            //Para ver la respuesta del servidor
-            #ifdef PRINT_HTTP_RESPONSE
-              delay(500);
-              Serial.println();
-              while(client.available()){String line = client.readStringUntil('\r');Serial.print(line); }
-              Serial.println();
-              Serial.println();
-            #endif
-        #endif
-    }
-}
-
-////////////////////////////////////////////////////
-/////////////// HTTP GET  //////////////////////////
-////////////////////////////////////////////////////
-
-void HTTPGet(String fieldData[], int numFields){
-  
-// Esta funcion construye el string de datos a enviar a ThingSpeak o Dweet mediante el metodo HTTP GET
-// La funcion envia "numFields" datos, del array fieldData.
-// Asegurate de ajustar "numFields" al número adecuado de datos que necesitas enviar y activa los campos en tu canal web
-  
-    if (client.connect( Server_Host , Server_HttpPort )){
-           #ifdef REST_SERVER_THINGSPEAK 
-              String PostData= "GET https://api.thingspeak.com/update?api_key=";
-              PostData= PostData + MyWriteAPIKey ;
-           #else 
-              String PostData= "GET http://dweet.io/dweet/for/";
-              PostData= PostData + MyWriteAPIKey +"?" ;
-           #endif
-           
-           for ( int field = 1; field < (numFields + 1); field++ ){
-              PostData += "&field" + String( field ) + "=" + fieldData[ field ];
-           }
-          
-           
-           #ifdef PRINT_DEBUG_MESSAGES
-              Serial.println( "Connecting to Server for update..." );
-           #endif
-           client.print(PostData);         
-           client.println(" HTTP/1.1");
-           client.println("Host: " + String(Rest_Host)); 
-           client.println("Connection: close");
-           client.println();
-           #ifdef PRINT_DEBUG_MESSAGES
-              Serial.println( PostData );
-              Serial.println();
-              //Para ver la respuesta del servidor
-              #ifdef PRINT_HTTP_RESPONSE
-                delay(500);
-                Serial.println();
-                while(client.available()){String line = client.readStringUntil('\r');Serial.print(line); }
-                Serial.println();
-                Serial.println();
-              #endif
-           #endif  
-    }
-}
-
-// Resistencias: Sal(Am,Mor,Marr) Temp(Roj,Roj,Roj)
-
-
-
-
-
-
-/////////////////////////////////////////
-//  Void setup()  ///////////////////////
-/////////////////////////////////////////
-
 void setup() {
-  #ifdef PRINT_DEBUG_MESSAGES
-    Serial.begin(9600);
-  #endif
-  Serial.println("Inicializamos la sonda");
-  pinMode(power_pin, OUTPUT);
+  Serial.begin(9600);
+  Serial.println("Inicializamos el sensor de pH");
 
-  connectWiFi();
-  digitalWrite(LED_PIN, HIGH);
-  
   ads1115.begin(0x48);
   ads1115.setGain(GAIN_ONE);
-
-  #ifdef PRINT_DEBUG_MESSAGES
-      Serial.print("Server_Host: ");
-      Serial.println(Server_Host);
-      Serial.print("Port: ");
-      Serial.println(String( Server_HttpPort ));
-      Serial.print("Server_Rest: ");
-      Serial.println(Rest_Host);
-  #endif
 }
 
 
 
-
-
-/////////////////////////////////////////
-//  sensHum()  //////////////////////////
-/////////////////////////////////////////
-
-int sensHum(int pin){
-  int channelValue = 0;
-  int sensorValue = 0;
-  int humidityValue = 0;
-
-  sensorValue = ads1115.readADC_SingleEnded(pin);
-  //9900 mojado
-  //20454 seco
-
-  //Serial.print("Hum "); Serial.println(sensorValue);
-
-  humidityValue = map(sensorValue, 20373, 9900, 0, 100);
-
-  if(humidityValue<0){
-    return 0;
+int averageSample(int *p, int tam){
+  int media = 0;
+  for(int i=0; i < tam; i++){
+    media = media + p[i];
   }
-  if(humidityValue>100){
-    return 100;
-  }
-  return humidityValue;
+  media = media/tam;
+  return media;
 }
 
-/////////////////////////////////////////
-//  sensSal()  //////////////////////////
-/////////////////////////////////////////
-
-int sensSal(){
-  
-  int adc;
-  int salinidad;
-  
-  digitalWrite(power_pin, HIGH);  
-  delay(100);
-  
-  adc = analogRead(A0);
-  Serial.print("Sal: "); Serial.println(adc);
-  
-  digitalWrite(power_pin, LOW);
-  delay(100);
-
-  salinidad = map(adc, 870, 1024 , 0, 100);
-
-  if(salinidad<0){
-    return 0;
-  }
-  if(salinidad>100){
-    return 100;
-  }
-  return salinidad;
-}
-
-/////////////////////////////////////////
-//  sensTemp()  /////////////////////////
-/////////////////////////////////////////
-
-float sensTemp(int pin){
-  int16_t adc = ads1115.readADC_SingleEnded(pin);
-
-  
-  float temperatura = ((((adc*4.096)/32767)-0.75)/0.037)+3;
-
-  return temperatura;
-}
-
-/////////////////////////////////////////
-//  senspH()  ///////////////////////////
-/////////////////////////////////////////
-
-double senspH(int pin){
-  static float pHValue, voltage;
-
-  int adc=ads1115.readADC_SingleEnded(pin);
-  voltage= adc * 4.096 / 32767; 
-  pHValue = 3.5 * voltage + offset;
-  
-  return pHValue;
-}
-
-
-/////////////////////////////////////////
-//  sensLuz()  //////////////////////////
-/////////////////////////////////////////
-
-int sensLuz(int pin){
-  int adc = ads1115.readADC_SingleEnded(pin);
-
-  //Serial.print("luz "); Serial.println(adc);
-  int iluminacion = map(adc , 29000, 20, 100, 0);
-  //Serial.println(iluminacion);
- 
-  if(iluminacion<0){
-    return 0;
-  }
-  if(iluminacion>100){
-    return 100;
-  }
-  return iluminacion;
-}
-
-/////////////////////////////////////////
-//  subirDatos()  ///////////////////////
-/////////////////////////////////////////
-
-void subirDatos(int hum, int sal, double temp, double pH, int luz){
-
-  String data[ NUM_FIELDS_TO_SEND + 1];  // Podemos enviar hasta 8 datos
-
-    
-    data[ 1 ] = String(hum);
-
-    data[ 2 ] = String(sal);
-
-    data[ 3 ] = String(temp);
-
-    data[ 4 ] = String(pH);
-
-    data[ 5 ] = String(luz);
-
-    //Selecciona si quieres enviar con GET(ThingSpeak o Dweet) o con POST(ThingSpeak)
-    //HTTPPost( data, NUM_FIELDS_TO_SEND );
-    HTTPGet( data, NUM_FIELDS_TO_SEND );
-  
-}
-
-
-
-
-
-
-/////////////////////////////////////////
-//  Void loop()  ////////////////////////
-/////////////////////////////////////////
 
 void loop() {
-  
-  //  Llamadas a funciones
-  int hum = sensHum(0);
-  
-  int sal = sensSal();
+  static unsigned long samplingTime = millis();
+  static unsigned long printTime = millis();
+  static float pHValue, voltage;
+  if (millis() - samplingTime > samplingInterval){
 
-  float temp = sensTemp(1);
+    int16_t adc = ads1115.readADC_SingleEnded(0);
+    pHArray[pHArrayIndex++] = adc;
 
-  float pH = senspH(2);
+    //Serial.println();Serial.println(adc);Serial.println();
+    
+    if(pHArrayIndex == ArrayLength)pHArrayIndex = 0;
 
-  int luz = sensLuz(3);
+      averageSample(pHArray, ArrayLength);
+      voltage = adc * 4.096/32767;
+      pHValue = 3.5 * voltage + offset; 
+      samplingTime = millis();
+  }
+  if(millis() - printTime > printInterval){
+    Serial.print("Voltage: ");
+    Serial.print(voltage, 2);
+    Serial.print("    pHValue: ");
+    Serial.println(pHValue, 2);
+    Serial.println();
+    
+    
+  }
 
-  subirDatos(hum, sal, temp, pH, luz);
-
- 
-  /*
-  Serial.println(hum);
-  Serial.println();
-  Serial.println(sal);
-  Serial.println();
-  Serial.println(temp);
-  Serial.println();
-  Serial.println(pH);
-  Serial.println();
-  Serial.println(luz);
-  Serial.println();
-  */
-  delay(4800);
 }

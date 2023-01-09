@@ -9,7 +9,6 @@
 int pHArray [ArrayLength];
 int pHArrayIndex = 0;
 
-int resultado = 0;
 
 #define PRINT_DEBUG_MESSAGES
 //#define PRINT_HTTP_RESPONSE
